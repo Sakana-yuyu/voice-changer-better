@@ -20,7 +20,7 @@ RUN cd client/lib && npm run build:prod
 RUN cd client/demo && npm run build:prod
 
 # Stage 2: Python后端环境
-FROM nvidia/cuda:11.8-cudnn8-runtime-ubuntu22.04 AS backend-base
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 AS backend-base
 
 ARG DEBIAN_FRONTEND=noninteractive
 

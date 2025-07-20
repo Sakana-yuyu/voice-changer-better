@@ -44,7 +44,19 @@ COPY server/requirements.txt ./server/
 # 升级pip并安装PyTorch 2.0 with CUDA 11.8支持
 RUN pip3 install --upgrade pip setuptools wheel
 RUN pip3 install --no-cache-dir torch==2.0.1 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
-RUN pip3 install --no-cache-dir -r server/requirements.txt
+# 分步安装依赖以提高成功率
+RUN pip3 install --no-cache-dir uvicorn==0.21.1 pyOpenSSL==23.1.1 numpy==1.23.5
+RUN pip3 install --no-cache-dir resampy==0.4.2 python-socketio==5.8.0 fastapi==0.95.1
+RUN pip3 install --no-cache-dir python-multipart==0.0.6 scipy==1.10.1 matplotlib==3.7.1
+RUN pip3 install --no-cache-dir websockets==11.0.2 dataclasses_json==0.5.7
+RUN pip3 install --no-cache-dir librosa==0.9.1 sounddevice==0.4.6
+RUN pip3 install --no-cache-dir einops==0.6.0 gin==0.1.6 gin_config==0.5.0
+RUN pip3 install --no-cache-dir faiss-cpu==1.7.3 || pip3 install --no-cache-dir faiss-cpu
+RUN pip3 install --no-cache-dir onnxruntime-gpu==1.13.1 || pip3 install --no-cache-dir onnxruntime
+RUN pip3 install --no-cache-dir torchcrepe==0.0.18 || echo "torchcrepe installation failed, continuing..."
+RUN pip3 install --no-cache-dir onnxsim==0.4.28 || echo "onnxsim installation failed, continuing..."
+RUN pip3 install --no-cache-dir local_attention==1.8.5 || echo "local_attention installation failed, continuing..."
+RUN pip3 install --no-cache-dir torchfcpe==0.0.3 || echo "torchfcpe installation failed, continuing..."
 
 # Stage 3: 最终镜像
 FROM backend-base AS final

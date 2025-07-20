@@ -65,14 +65,50 @@
 
 ## 快速开始
 
-### 前端开发
+### 使用 Docker (推荐)
+
+#### 1. 使用 docker-compose (最简单)
+```bash
+# GPU 版本
+docker-compose up -d
+
+# CPU 版本
+docker-compose --profile cpu up -d voice-changer-cpu
+```
+
+#### 2. 使用构建脚本
+```bash
+# 构建镜像
+chmod +x scripts/build-docker.sh
+./scripts/build-docker.sh
+
+# 部署服务
+chmod +x scripts/deploy.sh
+./scripts/deploy.sh --mode gpu --port 18888
+```
+
+#### 3. 手动 Docker 命令
+```bash
+# 构建镜像
+docker build -t voice-changer-better .
+
+# 运行容器 (GPU)
+docker run -d --name voice-changer --gpus all -p 18888:18888 voice-changer-better
+
+# 运行容器 (CPU)
+docker run -d --name voice-changer -p 18888:18888 voice-changer-better
+```
+
+### 本地开发
+
+#### 前端开发
 ```bash
 cd client/demo
 npm install
 npm start
 ```
 
-### 后端服务
+#### 后端服务
 ```bash
 cd server
 pip install -r requirements.txt
@@ -87,6 +123,42 @@ python MMVCServerSIO.py
 - 📱 响应式设计
 - ⚡ 优化的性能
 - 🎨 现代化的UI设计
+- 🐳 Docker 容器化支持
+- 🚀 自动化 CI/CD 流程
+- 📦 多平台镜像支持
+
+## 部署选项
+
+### 1. Docker 部署 (推荐)
+- 支持 GPU 和 CPU 模式
+- 一键部署脚本
+- 自动健康检查
+- 数据持久化
+
+### 2. 云平台部署
+- 支持 Kubernetes
+- 支持 Docker Swarm
+- 支持各大云服务商
+
+### 3. 本地开发
+- 热重载开发环境
+- 完整的开发工具链
+- 代码质量检查
+
+## 环境要求
+
+### 系统要求
+- **操作系统**: Linux, macOS, Windows
+- **内存**: 最少 4GB RAM (推荐 8GB+)
+- **存储**: 最少 10GB 可用空间
+- **GPU**: NVIDIA GPU (可选，用于加速)
+
+### 软件依赖
+- **Docker**: 20.10+ (用于容器化部署)
+- **Docker Compose**: 2.0+ (用于编排)
+- **Node.js**: 18+ (用于前端开发)
+- **Python**: 3.8+ (用于后端开发)
+- **CUDA**: 11.8+ (用于 GPU 加速)
 
 ## 许可证
 

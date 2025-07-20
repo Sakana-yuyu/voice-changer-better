@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  voice-changer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: voice-changer-better
+    ports:
+      - "18888:18888"
+    volumes:
+      - ./models:/voice-changer/server/model_dir
+      - ./pretrain:/voice-changer/server/pretrain
+      - ./tmp:/voice-changer/server/tmp_dir
+    environment:
+      - LOCAL_UID=1000
+      - LOCAL_GID=1000
+      - EX_PORT=18888
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18888/api/hello"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # CPU版本（不需要GPU）
+  voice-changer-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: voice-changer-better-cpu
+    ports:
+      - "18889:18888"
+    volumes:
+      - ./models:/voice-changer/server/model_dir
+      - ./pretrain:/voice-changer/server/pretrain
+      - ./tmp:/voice-changer/server/tmp_dir
+    environment:
+      - LOCAL_UID=1000
+      - LOCAL_GID=1000
+      - EX_PORT=18888
+    restart: unless-stopped
+    profiles:
+      - cpu
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18888/api/hello"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  models:
+  pretrain:
+  tmp:
+
+networks:
+  default:
+    name: voice-changer-network

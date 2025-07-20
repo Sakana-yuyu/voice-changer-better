@@ -8,9 +8,9 @@ WORKDIR /app
 COPY client/lib/package*.json ./client/lib/
 COPY client/demo/package*.json ./client/demo/
 
-# 安装依赖
-RUN cd client/lib && npm ci --only=production
-RUN cd client/demo && npm ci --only=production
+# 安装依赖（包含开发依赖，构建时需要）
+RUN cd client/lib && npm ci
+RUN cd client/demo && npm ci
 
 # 复制源代码
 COPY client/ ./client/

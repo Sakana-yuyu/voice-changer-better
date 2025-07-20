@@ -1,0 +1,4 @@
+[
+    { "mode": "normal", "z_index": 0, "number": 10, "layer_path": "ROOT_レイヤー2" },
+    { "mode": "talking", "z_index": 0, "number": 10, "layer_path": "ROOT_レイヤー1" }
+]

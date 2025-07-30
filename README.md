@@ -65,7 +65,138 @@
 
 ## 快速开始
 
-### 使用 Docker (推荐)
+### 🐳 使用 Docker 镜像 (推荐)
+
+本项目提供了优化的Docker镜像，在**6006端口**开放变声界面，配置简单，开箱即用。
+
+#### 1. 构建镜像
+```bash
+# 克隆项目
+git clone https://github.com/Sakana-yuyu/voice-changer-better.git
+cd voice-changer-better
+
+# 构建Docker镜像
+docker build -t voice-changer-better:latest .
+```
+
+#### 2. 运行容器
+
+**GPU版本（推荐）：**
+```bash
+docker run -d \
+  --name voice-changer-better \
+  --gpus all \
+  -p 6006:6006 \
+  -v $(pwd)/models:/voice-changer/server/model_dir \
+  -v $(pwd)/pretrain:/resources \
+  -v $(pwd)/tmp:/voice-changer/server/tmp_dir \
+  -e LOCAL_UID=$(id -u) \
+  -e LOCAL_GID=$(id -g) \
+  voice-changer-better:latest
+```
+
+**CPU版本：**
+```bash
+docker run -d \
+  --name voice-changer-better-cpu \
+  -p 6006:6006 \
+  -v $(pwd)/models:/voice-changer/server/model_dir \
+  -v $(pwd)/pretrain:/resources \
+  -v $(pwd)/tmp:/voice-changer/server/tmp_dir \
+  -e LOCAL_UID=$(id -u) \
+  -e LOCAL_GID=$(id -g) \
+  voice-changer-better:latest
+```
+
+#### 3. 访问应用
+启动成功后，在浏览器中访问：
+- **变声界面**: http://localhost:6006
+
+#### 4. 容器管理
+```bash
+# 查看日志
+docker logs -f voice-changer-better
+
+# 停止容器
+docker stop voice-changer-better
+
+# 重启容器
+docker restart voice-changer-better
+
+# 删除容器
+docker rm voice-changer-better
+
+# 进入容器调试
+docker exec -it voice-changer-better bash
+```
+
+#### 5. 目录说明
+- `models/`: 存放语音模型文件（.pth格式）
+- `pretrain/`: 存放预训练模型文件（.pth, .onnx格式）
+- `tmp/`: 临时文件目录
+
+#### 6. 注意事项
+- **端口变更**: 新版Docker镜像使用**6006端口**而非传统的18888端口
+- **自动用户管理**: 容器会自动创建与宿主机UID/GID匹配的用户，避免权限问题
+- **GPU支持**: 确保已安装NVIDIA Docker支持（`nvidia-docker2`）
+- **内存要求**: 建议至少8GB RAM，GPU版本需要4GB+ VRAM
+- **模型文件**: 首次运行前请将模型文件放入对应的挂载目录
+
+#### 7. 故障排除
+
+**容器无法启动：**
+```bash
+# 检查Docker是否运行
+sudo systemctl status docker
+
+# 检查端口是否被占用
+sudo netstat -tlnp | grep 6006
+
+# 查看详细错误日志
+docker logs voice-changer-better
+```
+
+**GPU不可用：**
+```bash
+# 检查NVIDIA Docker支持
+docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
+
+# 如果失败，安装nvidia-docker2
+sudo apt-get update
+sudo apt-get install -y nvidia-docker2
+sudo systemctl restart docker
+```
+
+**权限问题：**
+```bash
+# 确保目录权限正确
+sudo chown -R $(id -u):$(id -g) models/ pretrain/ tmp/
+
+# 或使用sudo运行容器
+sudo docker run ...
+```
+
+#### 8. 快速测试
+
+**验证服务是否正常运行：**
+```bash
+# 检查容器状态
+docker ps | grep voice-changer-better
+
+# 测试API接口
+curl http://localhost:6006/api/hello
+
+# 检查健康状态
+docker inspect --format='{{.State.Health.Status}}' voice-changer-better
+```
+
+**访问Web界面：**
+1. 打开浏览器访问 http://localhost:6006
+2. 如果看到Voice Changer界面，说明部署成功
+3. 上传模型文件到 `models/` 目录
+4. 在界面中选择模型开始使用
+
+### 使用传统 Docker Compose
 
 #### 1. 使用 docker-compose (最简单)
 ```bash

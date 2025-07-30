@@ -33,6 +33,7 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     wget \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
@@ -84,11 +85,16 @@ WORKDIR /voice-changer/server
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:18888/api/hello || exit 1
+    CMD curl -f http://localhost:6006/api/hello || exit 1
+
+# 创建启动脚本
+COPY base.sh ./
+
+# 设置权限
+RUN chmod +x ./base.sh
 
 # 暴露端口
-EXPOSE 18888
+EXPOSE 6006
 
 # 入口点
-ENTRYPOINT ["/bin/bash", "setup.sh"]
-CMD ["MMVC", "-p", "18888", "--https", "false"]
+ENTRYPOINT ["./base.sh"]

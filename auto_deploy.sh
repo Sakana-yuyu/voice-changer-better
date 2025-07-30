@@ -11,6 +11,7 @@ INIT_SYSTEM="unknown"
 IN_CONTAINER="false"
 IS_ROOT="false"
 SKIP_DOCKER_INSTALL="false"
+USE_ANACONDA="false"
 PACKAGE_MANAGER=""
 
 # 颜色定义
@@ -206,6 +207,198 @@ install_dependencies() {
     log_success "基础依赖安装完成"
 }
 
+# 安装Anaconda和Python 3.10环境
+install_anaconda_environment() {
+    log_step "安装Anaconda和Python 3.10环境..."
+    
+    # 检查是否已安装conda
+    if command -v conda &> /dev/null; then
+        log_info "检测到已安装的conda环境"
+        CONDA_VERSION=$(conda --version | cut -d' ' -f2)
+        log_info "Conda版本: $CONDA_VERSION"
+    else
+        log_info "开始下载和安装Anaconda..."
+        
+        # 创建临时目录
+        TEMP_DIR=$(mktemp -d)
+        cd "$TEMP_DIR"
+        
+        # 检测系统架构
+        ARCH=$(uname -m)
+        if [[ "$ARCH" == "x86_64" ]]; then
+            ANACONDA_INSTALLER="Anaconda3-2023.09-0-Linux-x86_64.sh"
+        elif [[ "$ARCH" == "aarch64" ]]; then
+            ANACONDA_INSTALLER="Anaconda3-2023.09-0-Linux-aarch64.sh"
+        else
+            log_error "不支持的系统架构: $ARCH"
+            return 1
+        fi
+        
+        # 多个镜像源下载Anaconda安装包
+        log_info "下载Anaconda安装包..."
+        DOWNLOAD_SUCCESS=false
+        
+        # 镜像源列表（按优先级排序）
+        MIRRORS=(
+            "https://mirrors.tuna.tsinghua.edu.cn/anaconda/archive"
+            "https://mirrors.ustc.edu.cn/anaconda/archive"
+            "https://mirrors.aliyun.com/anaconda/archive"
+            "https://repo.anaconda.com/archive"
+        )
+        
+        for mirror in "${MIRRORS[@]}"; do
+            log_info "尝试从 $mirror 下载..."
+            if wget -q --show-progress "$mirror/$ANACONDA_INSTALLER"; then
+                log_success "从 $mirror 下载成功"
+                DOWNLOAD_SUCCESS=true
+                break
+            else
+                log_warning "从 $mirror 下载失败，尝试下一个镜像源..."
+            fi
+        done
+        
+        if [[ "$DOWNLOAD_SUCCESS" != "true" ]]; then
+            log_error "所有镜像源下载失败"
+            return 1
+        fi
+        
+        # 安装Anaconda
+        log_info "安装Anaconda到 $HOME/anaconda3..."
+        bash "$ANACONDA_INSTALLER" -b -p "$HOME/anaconda3"
+        
+        # 初始化conda
+        log_info "初始化conda环境..."
+        "$HOME/anaconda3/bin/conda" init bash
+        
+        # 添加conda到PATH
+        export PATH="$HOME/anaconda3/bin:$PATH"
+        
+        # 清理临时文件
+        cd - > /dev/null
+        rm -rf "$TEMP_DIR"
+        
+        log_success "Anaconda安装完成"
+    fi
+    
+    # 确保conda在PATH中
+    if [[ ":$PATH:" != *":$HOME/anaconda3/bin:"* ]]; then
+        export PATH="$HOME/anaconda3/bin:$PATH"
+    fi
+    
+    # 配置conda镜像源
+    log_info "配置conda镜像源..."
+    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
+    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free
+    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r
+    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/pro
+    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2
+    conda config --set show_channel_urls yes
+    
+    # 配置pip镜像源
+    log_info "配置pip镜像源..."
+    mkdir -p ~/.pip
+    cat > ~/.pip/pip.conf << EOF
+[global]
+index-url = https://pypi.tuna.tsinghua.edu.cn/simple
+extra-index-url = https://mirrors.aliyun.com/pypi/simple/
+                  https://pypi.mirrors.ustc.edu.cn/simple/
+                  https://pypi.douban.com/simple/
+trusted-host = pypi.tuna.tsinghua.edu.cn
+               mirrors.aliyun.com
+               pypi.mirrors.ustc.edu.cn
+               pypi.douban.com
+EOF
+    
+    # 创建Python 3.10环境
+    log_info "创建Python 3.10虚拟环境..."
+    
+    # 检查环境是否已存在
+    if conda env list | grep -q "voice-changer-py310"; then
+        log_info "检测到已存在的voice-changer-py310环境"
+        read -p "是否重新创建环境？(y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            conda env remove -n voice-changer-py310 -y
+        else
+            log_info "使用现有环境"
+            return 0
+        fi
+    fi
+    
+    # 创建新环境
+    log_info "创建voice-changer-py310环境..."
+    conda create -n voice-changer-py310 python=3.10 -y
+    
+    # 激活环境并安装依赖
+    log_info "激活环境并安装Python依赖..."
+    source "$HOME/anaconda3/etc/profile.d/conda.sh"
+    conda activate voice-changer-py310
+    
+    # 检查是否有NVIDIA GPU来决定安装CPU还是GPU版本的PyTorch
+    if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
+        log_info "检测到NVIDIA GPU，安装GPU版本PyTorch..."
+        # 安装GPU版本PyTorch
+        conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia -y
+    else
+        log_info "未检测到NVIDIA GPU，安装CPU版本PyTorch..."
+        # 安装CPU版本PyTorch
+        conda install pytorch torchvision torchaudio cpuonly -c pytorch -y
+    fi
+    
+    # 安装项目依赖
+    if [[ -f "server/requirements.txt" ]]; then
+        log_info "安装项目依赖..."
+        pip install -r server/requirements.txt
+    fi
+    
+    log_success "Anaconda和Python 3.10环境配置完成"
+    log_info "环境名称: voice-changer-py310"
+    log_info "激活命令: conda activate voice-changer-py310"
+    log_info "Python版本: $(python --version)"
+}
+
+# 运行Python版本（不使用Docker）
+run_python_version() {
+    log_step "启动Python版本的Voice Changer..."
+    
+    # 检查是否在conda环境中
+    if [[ "$USE_ANACONDA" == "true" ]]; then
+        # 确保conda在PATH中
+        if [[ ":$PATH:" != *":$HOME/anaconda3/bin:"* ]]; then
+            export PATH="$HOME/anaconda3/bin:$PATH"
+        fi
+        
+        # 激活conda环境
+        source "$HOME/anaconda3/etc/profile.d/conda.sh"
+        conda activate voice-changer-py310
+        log_info "已激活conda环境: voice-changer-py310"
+    fi
+    
+    # 检查Python版本
+    PYTHON_VERSION=$(python --version 2>&1 | cut -d' ' -f2)
+    log_info "当前Python版本: $PYTHON_VERSION"
+    
+    # 进入服务器目录
+    cd server
+    
+    # 检查依赖
+    if [[ ! -f "requirements.txt" ]]; then
+        log_error "未找到requirements.txt文件"
+        return 1
+    fi
+    
+    # 安装依赖（如果需要）
+    log_info "检查并安装Python依赖..."
+    pip install -r requirements.txt
+    
+    # 启动服务
+    log_info "启动Voice Changer服务..."
+    log_info "服务将在 http://localhost:6006 启动"
+    log_info "按 Ctrl+C 停止服务"
+    
+    python MMVCServerSIO.py
+}
+
 # 检查Docker是否已安装
 check_docker() {
     log_step "检查Docker安装状态..."
@@ -241,55 +434,138 @@ install_docker() {
     
     case $PACKAGE_MANAGER in
         "apt")
-            # 优先尝试使用国内镜像源
-            log_info "使用阿里云镜像源安装Docker..."
+            # 检测系统版本
+            DISTRO=$(lsb_release -is | tr '[:upper:]' '[:lower:]')
+            CODENAME=$(lsb_release -cs)
             
-            # 添加Docker GPG密钥（使用阿里云镜像）
-            if curl -fsSL https://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg; then
-                log_success "GPG密钥添加成功"
-            else
-                log_warning "阿里云镜像源失败，尝试清华大学镜像源..."
-                curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-            fi
+            log_info "检测到系统: $DISTRO $CODENAME"
             
-            # 添加Docker仓库（使用阿里云镜像）
-            if echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://mirrors.aliyun.com/docker-ce/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null; then
-                log_success "阿里云Docker仓库添加成功"
-            else
-                log_warning "阿里云仓库添加失败，使用清华大学镜像源..."
-                echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-            fi
+            # 多个镜像源尝试安装Docker
+            DOCKER_MIRRORS=(
+                "https://mirrors.aliyun.com/docker-ce/linux/$DISTRO"
+                "https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$DISTRO"
+                "https://mirrors.ustc.edu.cn/docker-ce/linux/$DISTRO"
+                "https://download.docker.com/linux/$DISTRO"
+            )
             
-            # 更新包索引
-            sudo apt update
+            INSTALL_SUCCESS=false
             
-            # 安装Docker Engine
-            if ! sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin; then
-                log_warning "使用镜像源安装失败，尝试使用Ubuntu官方仓库..."
-                sudo apt install -y docker.io
+            for mirror in "${DOCKER_MIRRORS[@]}"; do
+                log_info "尝试使用镜像源: $mirror"
+                
+                # 清理之前可能失败的配置
+                sudo rm -f /usr/share/keyrings/docker-archive-keyring.gpg
+                sudo rm -f /etc/apt/sources.list.d/docker.list
+                
+                # 添加GPG密钥
+                if curl -fsSL "$mirror/gpg" | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg 2>/dev/null; then
+                    log_info "GPG密钥添加成功"
+                    
+                    # 添加Docker仓库
+                    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] $mirror $CODENAME stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+                    
+                    # 更新包索引
+                    if sudo apt update 2>/dev/null; then
+                        log_info "软件源更新成功"
+                        
+                        # 尝试安装Docker
+                        if sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin 2>/dev/null; then
+                            log_success "Docker安装成功（使用 $mirror）"
+                            INSTALL_SUCCESS=true
+                            break
+                        else
+                            log_warning "Docker安装失败，尝试下一个镜像源..."
+                        fi
+                    else
+                        log_warning "软件源更新失败，尝试下一个镜像源..."
+                    fi
+                else
+                    log_warning "GPG密钥添加失败，尝试下一个镜像源..."
+                fi
+            done
+            
+            # 如果所有镜像源都失败，尝试使用系统默认仓库
+            if [[ "$INSTALL_SUCCESS" != "true" ]]; then
+                log_warning "所有Docker镜像源安装失败，尝试使用系统默认仓库..."
+                sudo rm -f /usr/share/keyrings/docker-archive-keyring.gpg
+                sudo rm -f /etc/apt/sources.list.d/docker.list
+                sudo apt update
+                if sudo apt install -y docker.io docker-compose; then
+                    log_success "Docker安装成功（使用系统默认仓库）"
+                    INSTALL_SUCCESS=true
+                else
+                    log_error "Docker安装完全失败"
+                    return 1
+                fi
             fi
             ;;
         "yum")
-            # 优先尝试使用国内镜像源
-            log_info "使用阿里云镜像源安装Docker..."
-            
-            # 添加Docker仓库（使用阿里云镜像）
-            if sudo yum-config-manager --add-repo https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo; then
-                log_success "阿里云Docker仓库添加成功"
+            # 检测系统版本
+            if [[ -f /etc/redhat-release ]]; then
+                DISTRO="centos"
             else
-                log_warning "阿里云镜像源失败，使用官方源..."
-                sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+                DISTRO="rhel"
             fi
             
-            # 安装Docker Engine
-            if ! sudo yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin; then
-                log_warning "使用镜像源安装失败，尝试使用系统默认仓库..."
-                sudo yum install -y docker
+            log_info "检测到系统: $DISTRO"
+            
+            # 多个镜像源尝试安装Docker
+            DOCKER_YUM_MIRRORS=(
+                "https://mirrors.aliyun.com/docker-ce/linux/$DISTRO/docker-ce.repo"
+                "https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$DISTRO/docker-ce.repo"
+                "https://download.docker.com/linux/$DISTRO/docker-ce.repo"
+            )
+            
+            INSTALL_SUCCESS=false
+            
+            for mirror in "${DOCKER_YUM_MIRRORS[@]}"; do
+                log_info "尝试使用镜像源: $mirror"
+                
+                # 清理之前可能失败的配置
+                sudo rm -f /etc/yum.repos.d/docker-ce.repo
+                
+                # 添加Docker仓库
+                if sudo yum-config-manager --add-repo "$mirror" 2>/dev/null; then
+                    log_info "Docker仓库添加成功"
+                    
+                    # 尝试安装Docker
+                    if sudo yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin 2>/dev/null; then
+                        log_success "Docker安装成功（使用 $mirror）"
+                        INSTALL_SUCCESS=true
+                        break
+                    else
+                        log_warning "Docker安装失败，尝试下一个镜像源..."
+                    fi
+                else
+                    log_warning "Docker仓库添加失败，尝试下一个镜像源..."
+                fi
+            done
+            
+            # 如果所有镜像源都失败，尝试使用系统默认仓库
+            if [[ "$INSTALL_SUCCESS" != "true" ]]; then
+                log_warning "所有Docker镜像源安装失败，尝试使用系统默认仓库..."
+                sudo rm -f /etc/yum.repos.d/docker-ce.repo
+                if sudo yum install -y docker docker-compose; then
+                    log_success "Docker安装成功（使用系统默认仓库）"
+                    INSTALL_SUCCESS=true
+                else
+                    log_error "Docker安装完全失败"
+                    return 1
+                fi
             fi
             ;;
     esac
     
-    log_success "Docker安装完成"
+    if [[ "$INSTALL_SUCCESS" == "true" ]]; then
+        log_success "Docker安装完成"
+        
+        # 显示安装的Docker版本
+        DOCKER_VERSION=$(docker --version 2>/dev/null || echo "未知版本")
+        log_info "安装的Docker版本: $DOCKER_VERSION"
+    else
+        log_error "Docker安装失败"
+        return 1
+    fi
 }
 
 # 启动Docker服务
@@ -556,39 +832,74 @@ configure_docker_mirror() {
     # 创建Docker配置目录
     sudo mkdir -p /etc/docker
     
-    # 配置国内镜像加速器
+    # 备份原有配置
+    if [[ -f "/etc/docker/daemon.json" ]]; then
+        sudo cp /etc/docker/daemon.json /etc/docker/daemon.json.backup
+        log_info "已备份原有Docker配置"
+    fi
+    
+    # 配置国内镜像加速器（更多镜像源）
     cat <<EOF | sudo tee /etc/docker/daemon.json
 {
     "registry-mirrors": [
         "https://docker.mirrors.ustc.edu.cn",
         "https://hub-mirror.c.163.com",
         "https://mirror.baidubce.com",
-        "https://ccr.ccs.tencentyun.com"
+        "https://ccr.ccs.tencentyun.com",
+        "https://dockerproxy.com",
+        "https://mirror.iscas.ac.cn",
+        "https://docker.nju.edu.cn",
+        "https://docker.mirrors.sjtug.sjtu.edu.cn"
     ],
     "log-driver": "json-file",
     "log-opts": {
         "max-size": "100m",
         "max-file": "3"
     },
-    "storage-driver": "overlay2"
+    "storage-driver": "overlay2",
+    "exec-opts": ["native.cgroupdriver=systemd"],
+    "live-restore": true,
+    "userland-proxy": false,
+    "experimental": false
 }
 EOF
     
     # 重启Docker服务使配置生效
     if command -v systemctl &> /dev/null; then
         sudo systemctl daemon-reload
-        sudo systemctl restart docker
-        log_success "Docker镜像加速器配置完成（systemctl）"
+        if sudo systemctl restart docker; then
+            log_success "Docker镜像加速器配置完成（systemctl）"
+        else
+            log_warning "Docker服务重启失败，恢复备份配置"
+            if [[ -f "/etc/docker/daemon.json.backup" ]]; then
+                sudo mv /etc/docker/daemon.json.backup /etc/docker/daemon.json
+                sudo systemctl restart docker
+            fi
+            return 1
+        fi
     elif command -v service &> /dev/null; then
-        sudo service docker restart
-        log_success "Docker镜像加速器配置完成（service）"
+        if sudo service docker restart; then
+            log_success "Docker镜像加速器配置完成（service）"
+        else
+            log_warning "Docker服务重启失败，恢复备份配置"
+            if [[ -f "/etc/docker/daemon.json.backup" ]]; then
+                sudo mv /etc/docker/daemon.json.backup /etc/docker/daemon.json
+                sudo service docker restart
+            fi
+            return 1
+        fi
     else
         log_warning "无法重启Docker服务，请手动重启"
     fi
     
+    # 等待Docker服务完全启动
+    sleep 5
+    
     # 验证配置
-    if docker info | grep -A 10 "Registry Mirrors" &> /dev/null; then
+    if docker info | grep -A 15 "Registry Mirrors" &> /dev/null; then
         log_success "Docker镜像加速器验证成功"
+        log_info "已配置的镜像源:"
+        docker info | grep -A 15 "Registry Mirrors" | grep "https://" | sed 's/^[ ]*//'
     else
         log_warning "Docker镜像加速器验证失败，但不影响使用"
     fi
@@ -739,12 +1050,65 @@ show_usage() {
     echo
 }
 
+# 显示帮助信息
+show_help() {
+    echo "Voice Changer Better 自动化部署脚本"
+    echo
+    echo "用法: $0 [选项]"
+    echo
+    echo "选项:"
+    echo "  --anaconda          使用Anaconda和Python 3.10环境（不使用Docker）"
+    echo "  --skip-docker       跳过Docker安装，使用现有Docker环境"
+    echo "  --help, -h          显示此帮助信息"
+    echo
+    echo "示例:"
+    echo "  $0                   # 默认Docker部署"
+    echo "  $0 --anaconda       # 使用Anaconda环境部署"
+    echo "  $0 --skip-docker    # 跳过Docker安装"
+    echo
+}
+
+# 解析命令行参数
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --anaconda)
+                USE_ANACONDA="true"
+                SKIP_DOCKER_INSTALL="true"
+                shift
+                ;;
+            --skip-docker)
+                SKIP_DOCKER_INSTALL="true"
+                shift
+                ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            *)
+                log_error "未知参数: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+}
+
 # 主函数
 main() {
+    # 解析命令行参数
+    parse_arguments "$@"
+    
     echo "======================================"
     echo "Voice Changer Better 自动化部署脚本"
     echo "======================================"
     echo
+    
+    if [[ "$USE_ANACONDA" == "true" ]]; then
+        log_info "模式: Anaconda + Python 3.10 环境"
+    else
+        log_info "模式: Docker 容器化部署"
+    fi
     
     # 检查root用户
     check_root
@@ -764,50 +1128,63 @@ main() {
     # 安装基础依赖
     install_dependencies
     
-    # 处理容器环境下的Docker-in-Docker
-    handle_docker_in_docker
-    
-    # 检查并安装Docker
-    if [ "$SKIP_DOCKER_INSTALL" = "true" ]; then
-        log_info "跳过Docker安装，使用现有Docker环境"
-        if ! docker info &> /dev/null; then
-            log_error "无法连接到Docker，请确保Docker正在运行"
-            exit 1
-        fi
-    elif ! check_docker; then
-        install_docker
-        start_docker_service
-        setup_docker_permissions
-        verify_docker
-    fi
-    
-    # 安装NVIDIA Docker（如果需要且未跳过Docker安装）
-    if [ "$SKIP_DOCKER_INSTALL" != "true" ]; then
-        install_nvidia_docker
+    # 根据选择的模式执行不同的部署流程
+    if [[ "$USE_ANACONDA" == "true" ]]; then
+        log_info "开始Anaconda环境部署..."
         
-        # 配置Docker镜像加速器
-        configure_docker_mirror
+        # 安装Anaconda和Python 3.10环境
+        install_anaconda_environment
+        
+        # 运行Python版本
+        run_python_version
     else
-        log_info "跳过NVIDIA Docker和镜像加速器配置"
+        log_info "开始Docker容器化部署..."
+        
+        # 处理容器环境下的Docker-in-Docker
+        handle_docker_in_docker
+        
+        # 检查并安装Docker
+        if [ "$SKIP_DOCKER_INSTALL" = "true" ]; then
+            log_info "跳过Docker安装，使用现有Docker环境"
+            if ! docker info &> /dev/null; then
+                log_error "无法连接到Docker，请确保Docker正在运行"
+                exit 1
+            fi
+        elif ! check_docker; then
+            install_docker
+            start_docker_service
+            setup_docker_permissions
+            verify_docker
+        fi
+        
+        # 安装NVIDIA Docker（如果需要且未跳过Docker安装）
+        if [ "$SKIP_DOCKER_INSTALL" != "true" ]; then
+            install_nvidia_docker
+            
+            # 配置Docker镜像加速器
+            configure_docker_mirror
+        else
+            log_info "跳过NVIDIA Docker和镜像加速器配置"
+        fi
+        
+        # 准备项目
+        prepare_project
+        
+        # 构建镜像
+        build_docker_image
+        
+        # 运行容器
+        run_container
+        
+        # 等待服务启动
+        wait_for_service
+        
+        # 验证部署
+        verify_deployment
+        
+        # 显示使用说明
+        show_usage
     fi
-    
-    # 准备项目
-    prepare_project
-    
-    # 构建镜像
-    build_docker_image
-    
-    # 运行容器
-    run_container
-    
-    # 等待服务启动
-    wait_for_service
-    
-    # 验证部署
-    verify_deployment
-    
-    # 显示使用说明
-    show_usage
     
     echo
     log_success "🎉 Voice Changer Better 部署完成！"

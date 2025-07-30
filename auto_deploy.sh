@@ -47,6 +47,38 @@ check_root() {
     fi
 }
 
+# 检查并安装sudo
+check_and_install_sudo() {
+    if [[ $EUID -eq 0 ]]; then
+        # 检查sudo是否存在
+        if ! command -v sudo &> /dev/null; then
+            log_warning "检测到sudo命令不存在"
+            read -p "是否安装sudo？(y/N): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                log_step "安装sudo..."
+                case $PACKAGE_MANAGER in
+                    "apt")
+                        apt update && apt install -y sudo
+                        ;;
+                    "yum")
+                        yum install -y sudo
+                        ;;
+                esac
+                log_success "sudo安装完成"
+            else
+                log_warning "选择不安装sudo，将以root权限直接执行命令"
+                # 创建一个临时脚本，去除所有sudo命令
+                log_step "创建无sudo版本的脚本..."
+                sed 's/sudo //g' "$0" > "${0%.sh}_root.sh"
+                chmod +x "${0%.sh}_root.sh"
+                log_info "已创建 ${0%.sh}_root.sh，请运行此脚本"
+                exit 0
+            fi
+        fi
+    fi
+}
+
 # 检测操作系统
 detect_os() {
     log_step "检测操作系统..."
@@ -429,6 +461,9 @@ main() {
     
     # 检测操作系统
     detect_os
+    
+    # 检查并安装sudo
+    check_and_install_sudo
     
     # 更新系统
     update_system

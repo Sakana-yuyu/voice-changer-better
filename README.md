@@ -65,55 +65,120 @@
 
 ## 快速开始
 
-### 🐳 使用 Docker 镜像 (推荐)
+### 🚀 一键自动化部署 (推荐)
 
-本项目提供了优化的Docker镜像，在**6006端口**开放变声界面，配置简单，开箱即用。
+使用我们提供的自动化部署脚本，从环境配置到服务启动的全流程自动化部署。
 
-#### 1. 构建镜像
 ```bash
 # 克隆项目
-git clone https://github.com/Sakana-yuyu/voice-changer-better.git
+git clone https://github.com/your-repo/voice-changer-better.git
 cd voice-changer-better
 
-# 构建Docker镜像
-docker build -t voice-changer-better:latest .
+# 给脚本执行权限
+chmod +x auto_deploy.sh start_anaconda.sh start_web.sh
+
+# Docker部署（推荐）
+./auto_deploy.sh
+
+# 或 Anaconda环境部署
+./auto_deploy.sh --anaconda
+
+# 启动Web界面
+./start_web.sh
 ```
 
-#### 2. 运行容器
+### 📋 部署方式选择
 
-**GPU版本（推荐）：**
+| 部署方式 | 优势 | 适用场景 |
+|---------|------|----------|
+| **Docker部署** | 环境隔离、一键部署、跨平台 | 生产环境、快速体验 |
+| **Anaconda部署** | 性能更好、调试方便、资源占用少 | 开发环境、性能要求高 |
+
+### 🐳 Docker 部署
+
+#### 自动化部署
 ```bash
+# 一键Docker部署
+./auto_deploy.sh
+```
+
+#### 手动部署
+```bash
+# 构建镜像
+docker build -t voice-changer-better:latest .
+
+# GPU版本（推荐）
 docker run -d \
   --name voice-changer-better \
   --gpus all \
   -p 6006:6006 \
-  -v $(pwd)/models:/voice-changer/server/model_dir \
-  -v $(pwd)/pretrain:/resources \
-  -v $(pwd)/tmp:/voice-changer/server/tmp_dir \
-  -e LOCAL_UID=$(id -u) \
-  -e LOCAL_GID=$(id -g) \
+  -v $(pwd)/docker_folder/model_dir:/voice-changer/server/model_dir \
+  -v $(pwd)/docker_folder/pretrain:/resources \
   voice-changer-better:latest
-```
 
-**CPU版本：**
-```bash
+# CPU版本
 docker run -d \
   --name voice-changer-better-cpu \
   -p 6006:6006 \
-  -v $(pwd)/models:/voice-changer/server/model_dir \
-  -v $(pwd)/pretrain:/resources \
-  -v $(pwd)/tmp:/voice-changer/server/tmp_dir \
-  -e LOCAL_UID=$(id -u) \
-  -e LOCAL_GID=$(id -g) \
+  -v $(pwd)/docker_folder/model_dir:/voice-changer/server/model_dir \
+  -v $(pwd)/docker_folder/pretrain:/resources \
   voice-changer-better:latest
 ```
 
-#### 3. 访问应用
+### 🐍 Anaconda 部署
+
+#### 自动化部署
+```bash
+# 一键Anaconda部署
+./auto_deploy.sh --anaconda
+```
+
+#### 启动服务
+```bash
+# 基本启动
+./start_anaconda.sh
+
+# 检查环境
+./start_anaconda.sh --check-env
+
+# 强制GPU模式
+./start_anaconda.sh --gpu
+
+# 强制CPU模式
+./start_anaconda.sh --cpu
+```
+
+#### 手动部署
+```bash
+# 安装Anaconda（如果未安装）
+wget https://repo.anaconda.com/archive/Anaconda3-2023.09-0-Linux-x86_64.sh
+bash Anaconda3-2023.09-0-Linux-x86_64.sh
+
+# 创建Python 3.10环境
+conda create -n voice-changer-py310 python=3.10 -y
+conda activate voice-changer-py310
+
+# 安装依赖
+cd server
+pip install -r requirements.txt
+
+# 启动服务
+python MMVCServerSIO.py
+```
+
+### 🌐 访问应用
+
 启动成功后，在浏览器中访问：
 - **变声界面**: http://localhost:6006
+- **API接口**: http://localhost:6006/api/hello
 
-#### 4. 容器管理
+### 🛠️ 服务管理
+
+#### Docker容器管理
 ```bash
+# 查看容器状态
+docker ps | grep voice-changer
+
 # 查看日志
 docker logs -f voice-changer-better
 
@@ -130,166 +195,180 @@ docker rm voice-changer-better
 docker exec -it voice-changer-better bash
 ```
 
-#### 5. 目录说明
-- `models/`: 存放语音模型文件（.pth格式）
-- `pretrain/`: 存放预训练模型文件（.pth, .onnx格式）
-- `tmp/`: 临时文件目录
-
-#### 6. 注意事项
-- **端口变更**: 新版Docker镜像使用**6006端口**而非传统的18888端口
-- **自动用户管理**: 容器会自动创建与宿主机UID/GID匹配的用户，避免权限问题
-- **GPU支持**: 确保已安装NVIDIA Docker支持（`nvidia-docker2`）
-- **内存要求**: 建议至少8GB RAM，GPU版本需要4GB+ VRAM
-- **模型文件**: 首次运行前请将模型文件放入对应的挂载目录
-
-#### 7. 故障排除
-
-**容器无法启动：**
+#### Anaconda环境管理
 ```bash
-# 检查Docker是否运行
-sudo systemctl status docker
+# 查看环境信息
+./start_anaconda.sh --check-env
 
-# 检查端口是否被占用
-sudo netstat -tlnp | grep 6006
+# 激活环境
+conda activate voice-changer-py310
 
-# 查看详细错误日志
-docker logs voice-changer-better
+# 更新依赖
+./start_anaconda.sh --install-deps
+
+# 重新创建环境
+conda env remove -n voice-changer-py310
+./auto_deploy.sh --anaconda
 ```
 
-**GPU不可用：**
+#### 快速启动Web界面
 ```bash
-# 检查NVIDIA Docker支持
+# 启动Web界面（自动检测环境）
+./start_web.sh
+
+# 指定端口启动
+./start_web.sh --port 8080
+
+# 强制使用Docker模式
+./start_web.sh --docker
+
+# 强制使用Anaconda模式
+./start_web.sh --anaconda
+
+# 检查服务状态
+./start_web.sh --status
+
+# 停止服务
+./start_web.sh --stop
+```
+
+### 📁 模型文件管理
+
+#### 目录结构
+```
+# Docker部署
+docker_folder/
+├── model_dir/          # 语音模型文件
+└── pretrain/           # 预训练模型文件
+
+# Anaconda部署
+server/
+├── model_dir/          # 语音模型文件
+├── pretrain/           # 预训练模型文件
+└── tmp_dir/            # 临时文件目录
+```
+
+#### 支持的模型格式
+- **语音模型**: `.pth`, `.onnx`, `.safetensors`
+- **预训练模型**: `.pth`, `.onnx`, `.bin`
+- **配置文件**: `.json`, `.yaml`
+
+### 📋 系统要求
+
+#### 硬件要求
+- **CPU**: 4核心以上（推荐8核心）
+- **内存**: 8GB RAM以上（推荐16GB）
+- **GPU**: NVIDIA GPU（可选，推荐4GB+ VRAM）
+- **存储**: 20GB可用空间
+
+#### 软件要求
+- **操作系统**: Linux (Ubuntu 18.04+, CentOS 7+), macOS, Windows
+- **Docker**: 20.10+ (Docker部署)
+- **Python**: 3.8-3.10 (Anaconda部署)
+- **CUDA**: 11.8+ (GPU加速)
+- **NVIDIA Docker**: 2.0+ (GPU版本)
+
+### ⚠️ 重要注意事项
+
+- **端口**: 默认使用**6006端口**
+- **GPU支持**: 需要安装NVIDIA Docker支持
+- **内存要求**: 建议至少8GB RAM，GPU版本需要4GB+ VRAM
+- **模型文件**: 首次运行前请将模型文件放入对应目录
+- **权限**: Linux系统可能需要sudo权限
+
+### 🔧 故障排除
+
+#### 服务无法启动
+```bash
+# 检查端口占用
+netstat -tlnp | grep 6006
+# 或使用 lsof -i :6006
+
+# 检查Docker服务
+sudo systemctl status docker
+
+# 查看详细日志
+docker logs voice-changer-better
+# 或 ./start_anaconda.sh --check-env
+```
+
+#### GPU相关问题
+```bash
+# 检查NVIDIA驱动
+nvidia-smi
+
+# 检查NVIDIA Docker
 docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
 
-# 如果失败，安装nvidia-docker2
-sudo apt-get update
+# 重新安装NVIDIA Docker
 sudo apt-get install -y nvidia-docker2
 sudo systemctl restart docker
 ```
 
-**权限问题：**
+#### 环境问题
 ```bash
-# 确保目录权限正确
-sudo chown -R $(id -u):$(id -g) models/ pretrain/ tmp/
+# Anaconda环境问题
+conda info --envs
+conda activate voice-changer-py310
 
-# 或使用sudo运行容器
-sudo docker run ...
+# 依赖问题
+pip install -r server/requirements.txt --upgrade
+
+# 权限问题
+sudo chown -R $(id -u):$(id -g) docker_folder/
 ```
 
-#### 8. 快速测试
-
-**验证服务是否正常运行：**
+#### 快速验证
 ```bash
-# 检查容器状态
-docker ps | grep voice-changer-better
-
-# 测试API接口
+# 检查服务状态
 curl http://localhost:6006/api/hello
 
-# 检查健康状态
-docker inspect --format='{{.State.Health.Status}}' voice-changer-better
+# 检查容器状态
+docker ps | grep voice-changer
+
+# 使用启动脚本检查
+./start_web.sh --status
 ```
 
-**访问Web界面：**
-1. 打开浏览器访问 http://localhost:6006
-2. 如果看到Voice Changer界面，说明部署成功
-3. 上传模型文件到 `models/` 目录
-4. 在界面中选择模型开始使用
+### 📚 详细文档
 
-### 使用传统 Docker Compose
+如需更详细的部署指南和配置说明，请参考以下文档：
 
-#### 1. 使用 docker-compose (最简单)
+- **[完整部署指南](LINUX_DEPLOYMENT_GUIDE.md)** - Linux系统完整部署流程
+- **[Anaconda环境指南](ANACONDA_SETUP.md)** - Anaconda环境详细配置
+- **[Docker配置说明](docker-compose.yml)** - Docker Compose配置文件
+- **[开发者指南](client/demo/README.md)** - 前端开发和调试
+
+### 🔄 其他部署方式
+
+#### Docker Compose
 ```bash
-# GPU 版本
+# GPU版本
 docker-compose up -d
 
-# CPU 版本
+# CPU版本
 docker-compose --profile cpu up -d voice-changer-cpu
 ```
 
-#### 2. 使用构建脚本
+#### 本地开发
 ```bash
-# 构建镜像
-chmod +x scripts/build-docker.sh
-./scripts/build-docker.sh
+# 前端开发
+cd client/demo && npm install && npm start
 
-# 部署服务
-chmod +x scripts/deploy.sh
-./scripts/deploy.sh --mode gpu --port 18888
+# 后端服务
+cd server && pip install -r requirements.txt && python MMVCServerSIO.py
 ```
 
-#### 3. 手动 Docker 命令
-```bash
-# 构建镜像
-docker build -t voice-changer-better .
+## ✨ 主要特性
 
-# 运行容器 (GPU)
-docker run -d --name voice-changer --gpus all -p 18888:18888 voice-changer-better
-
-# 运行容器 (CPU)
-docker run -d --name voice-changer -p 18888:18888 voice-changer-better
-```
-
-### 本地开发
-
-#### 前端开发
-```bash
-cd client/demo
-npm install
-npm start
-```
-
-#### 后端服务
-```bash
-cd server
-pip install -r requirements.txt
-python MMVCServerSIO.py
-```
-
-## 特性
-
-- 🎵 支持多种语音变声模型
-- 🔄 实时语音处理
-- 🎛️ 直观的用户界面
-- 📱 响应式设计
-- ⚡ 优化的性能
-- 🎨 现代化的UI设计
-- 🐳 Docker 容器化支持
-- 🚀 自动化 CI/CD 流程
-- 📦 多平台镜像支持
-
-## 部署选项
-
-### 1. Docker 部署 (推荐)
-- 支持 GPU 和 CPU 模式
-- 一键部署脚本
-- 自动健康检查
-- 数据持久化
-
-### 2. 云平台部署
-- 支持 Kubernetes
-- 支持 Docker Swarm
-- 支持各大云服务商
-
-### 3. 本地开发
-- 热重载开发环境
-- 完整的开发工具链
-- 代码质量检查
-
-## 环境要求
-
-### 系统要求
-- **操作系统**: Linux, macOS, Windows
-- **内存**: 最少 4GB RAM (推荐 8GB+)
-- **存储**: 最少 10GB 可用空间
-- **GPU**: NVIDIA GPU (可选，用于加速)
-
-### 软件依赖
-- **Docker**: 20.10+ (用于容器化部署)
-- **Docker Compose**: 2.0+ (用于编排)
-- **Node.js**: 18+ (用于前端开发)
-- **Python**: 3.8+ (用于后端开发)
-- **CUDA**: 11.8+ (用于 GPU 加速)
+- 🎵 **多模型支持** - RVC、SoVitsSVC、DDSP-SVC等多种变声模型
+- 🔄 **实时处理** - 低延迟实时语音变声
+- 🎛️ **优化界面** - 紧凑化设计，现代化UI
+- 🐳 **容器化** - Docker和Anaconda双重部署方案
+- 🚀 **一键部署** - 自动化脚本，开箱即用
+- ⚡ **GPU加速** - 支持NVIDIA GPU加速推理
+- 📱 **跨平台** - 支持Linux、macOS、Windows
+- 🛠️ **易管理** - 完善的服务管理和监控工具
 
 ## 许可证
 

@@ -1,6 +1,8 @@
 # Voice Changer Better - Anaconda环境部署指南
 
-本指南将帮助您在Anaconda和Python 3.10环境下运行Voice Changer Better，支持CPU和GPU模式。
+> 📖 **主要文档**: [返回主README](README.md) | [Docker部署指南](LINUX_DEPLOYMENT_GUIDE.md)
+
+本指南提供Anaconda和Python 3.10环境下的详细部署说明。如需快速开始，请参考[主README](README.md#快速开始)。
 
 ## 快速开始
 

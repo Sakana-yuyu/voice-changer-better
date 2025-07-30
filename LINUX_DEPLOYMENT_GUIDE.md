@@ -1,6 +1,8 @@
 # Voice Changer Better Linux 部署完整指南
 
-本文档将指导您从零开始在Linux系统上部署Voice Changer Better项目，包括环境准备、项目克隆、Docker配置和服务启动的完整流程。
+> 📖 **主要文档**: [返回主README](README.md) | [Anaconda部署指南](ANACONDA_SETUP.md)
+
+本文档提供Linux系统的完整部署流程。如需快速开始，请参考[主README](README.md#快速开始)。
 
 ## 📋 系统要求
 

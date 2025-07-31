@@ -331,8 +331,39 @@ EOF
     
     # 激活环境并安装依赖
     log_info "激活环境并安装Python依赖..."
-    source "$HOME/anaconda3/etc/profile.d/conda.sh"
-    conda activate voice-changer-py310
+    
+    # 检测conda.sh的位置
+    CONDA_SH_PATHS=(
+        "$HOME/anaconda3/etc/profile.d/conda.sh"
+        "/root/anaconda3/etc/profile.d/conda.sh"
+        "/opt/anaconda3/etc/profile.d/conda.sh"
+        "/usr/local/anaconda3/etc/profile.d/conda.sh"
+        "/opt/miniconda3/etc/profile.d/conda.sh"
+        "$HOME/miniconda3/etc/profile.d/conda.sh"
+    )
+    
+    CONDA_SH_FOUND=false
+    for conda_sh_path in "${CONDA_SH_PATHS[@]}"; do
+        if [[ -f "$conda_sh_path" ]]; then
+            log_info "找到conda.sh: $conda_sh_path"
+            source "$conda_sh_path"
+            CONDA_SH_FOUND=true
+            break
+        fi
+    done
+    
+    if [[ "$CONDA_SH_FOUND" != "true" ]]; then
+        log_warning "未找到conda.sh，尝试直接激活环境..."
+        # 如果找不到conda.sh，尝试直接使用conda命令
+        if ! conda activate voice-changer-py310 2>/dev/null; then
+            log_error "无法激活conda环境，请检查conda安装"
+            log_info "请手动运行以下命令激活环境:"
+            log_info "conda activate voice-changer-py310"
+            return 1
+        fi
+    else
+        conda activate voice-changer-py310
+    fi
     
     # 检查是否有NVIDIA GPU来决定安装CPU还是GPU版本的PyTorch
     if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
@@ -368,9 +399,34 @@ run_python_version() {
             export PATH="$HOME/anaconda3/bin:$PATH"
         fi
         
-        # 激活conda环境
-        source "$HOME/anaconda3/etc/profile.d/conda.sh"
-        conda activate voice-changer-py310
+        # 激活conda环境 - 检测conda.sh的位置
+        CONDA_SH_PATHS=(
+            "$HOME/anaconda3/etc/profile.d/conda.sh"
+            "/root/anaconda3/etc/profile.d/conda.sh"
+            "/opt/anaconda3/etc/profile.d/conda.sh"
+            "/usr/local/anaconda3/etc/profile.d/conda.sh"
+            "/opt/miniconda3/etc/profile.d/conda.sh"
+            "$HOME/miniconda3/etc/profile.d/conda.sh"
+        )
+        
+        CONDA_SH_FOUND=false
+        for conda_sh_path in "${CONDA_SH_PATHS[@]}"; do
+            if [[ -f "$conda_sh_path" ]]; then
+                source "$conda_sh_path"
+                CONDA_SH_FOUND=true
+                break
+            fi
+        done
+        
+        if [[ "$CONDA_SH_FOUND" != "true" ]]; then
+            log_warning "未找到conda.sh，尝试直接激活环境..."
+            if ! conda activate voice-changer-py310 2>/dev/null; then
+                log_error "无法激活conda环境，请检查conda安装"
+                return 1
+            fi
+        else
+            conda activate voice-changer-py310
+        fi
         log_info "已激活conda环境: voice-changer-py310"
     fi
     

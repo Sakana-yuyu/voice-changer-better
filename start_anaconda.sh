@@ -107,15 +107,32 @@ check_conda() {
 activate_environment() {
     log_step "激活voice-changer-py310环境..."
     
-    # 初始化conda
-    if [[ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]]; then
-        source "$HOME/anaconda3/etc/profile.d/conda.sh"
-    elif [[ -f "/opt/anaconda3/etc/profile.d/conda.sh" ]]; then
-        source "/opt/anaconda3/etc/profile.d/conda.sh"
-    elif [[ -f "/usr/local/anaconda3/etc/profile.d/conda.sh" ]]; then
-        source "/usr/local/anaconda3/etc/profile.d/conda.sh"
-    else
+    # 初始化conda - 检测conda.sh的位置
+    CONDA_SH_PATHS=(
+        "$HOME/anaconda3/etc/profile.d/conda.sh"
+        "/root/anaconda3/etc/profile.d/conda.sh"
+        "/opt/anaconda3/etc/profile.d/conda.sh"
+        "/usr/local/anaconda3/etc/profile.d/conda.sh"
+        "/opt/miniconda3/etc/profile.d/conda.sh"
+        "$HOME/miniconda3/etc/profile.d/conda.sh"
+    )
+    
+    CONDA_SH_FOUND=false
+    for conda_sh_path in "${CONDA_SH_PATHS[@]}"; do
+        if [[ -f "$conda_sh_path" ]]; then
+            log_info "找到conda.sh: $conda_sh_path"
+            source "$conda_sh_path"
+            CONDA_SH_FOUND=true
+            break
+        fi
+    done
+    
+    if [[ "$CONDA_SH_FOUND" != "true" ]]; then
         log_error "未找到conda初始化脚本"
+        log_info "请检查conda安装路径，支持的路径包括:"
+        for path in "${CONDA_SH_PATHS[@]}"; do
+            log_info "  - $path"
+        done
         exit 1
     fi
     

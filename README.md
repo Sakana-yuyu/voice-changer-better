@@ -71,7 +71,7 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-repo/voice-changer-better.git
+git clone https://github.com/Sakana-yuyu/voice-changer-better.git
 cd voice-changer-better
 
 # 给脚本执行权限

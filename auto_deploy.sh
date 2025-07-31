@@ -280,9 +280,30 @@ install_anaconda_environment() {
         log_success "Anaconda安装完成"
     fi
     
-    # 确保conda在PATH中
-    if [[ ":$PATH:" != *":$HOME/anaconda3/bin:"* ]]; then
-        export PATH="$HOME/anaconda3/bin:$PATH"
+    # 动态检测conda安装路径并确保在PATH中
+    CONDA_PATHS=(
+        "$HOME/anaconda3/bin"
+        "/root/anaconda3/bin"
+        "/opt/anaconda3/bin"
+        "/usr/local/anaconda3/bin"
+        "/opt/miniconda3/bin"
+        "$HOME/miniconda3/bin"
+    )
+    
+    CONDA_BIN_FOUND=false
+    for conda_bin_path in "${CONDA_PATHS[@]}"; do
+        if [[ -d "$conda_bin_path" ]] && [[ -f "$conda_bin_path/conda" ]]; then
+            if [[ ":$PATH:" != *":$conda_bin_path:"* ]]; then
+                export PATH="$conda_bin_path:$PATH"
+                log_info "添加conda路径到PATH: $conda_bin_path"
+            fi
+            CONDA_BIN_FOUND=true
+            break
+        fi
+    done
+    
+    if [[ "$CONDA_BIN_FOUND" != "true" ]]; then
+        log_warning "未找到conda可执行文件，尝试使用默认路径"
     fi
     
     # 配置conda镜像源
@@ -365,15 +386,74 @@ EOF
         conda activate voice-changer-py310
     fi
     
-    # 检查是否有NVIDIA GPU来决定安装CPU还是GPU版本的PyTorch
-    if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
-        log_info "检测到NVIDIA GPU，安装GPU版本PyTorch..."
-        # 安装GPU版本PyTorch
-        conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia -y
+    # 检查PyTorch是否已安装
+    log_info "检查PyTorch安装状态..."
+    PYTORCH_INSTALLED=false
+    PYTORCH_VERSION=""
+    PYTORCH_CUDA_AVAILABLE=false
+    
+    if python -c "import torch" &> /dev/null; then
+        PYTORCH_INSTALLED=true
+        PYTORCH_VERSION=$(python -c "import torch; print(torch.__version__)" 2>/dev/null || echo "未知")
+        log_info "检测到已安装的PyTorch版本: $PYTORCH_VERSION"
+        
+        # 检查CUDA支持
+        if python -c "import torch; print(torch.cuda.is_available())" 2>/dev/null | grep -q "True"; then
+            PYTORCH_CUDA_AVAILABLE=true
+            CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda)" 2>/dev/null || echo "未知")
+            log_info "PyTorch支持CUDA，版本: $CUDA_VERSION"
+        else
+            log_info "PyTorch不支持CUDA或仅CPU版本"
+        fi
+        
+        # 检查版本是否满足要求（2.0+）
+        if python -c "import torch; import sys; sys.exit(0 if tuple(map(int, torch.__version__.split('.')[:2])) >= (2, 0) else 1)" 2>/dev/null; then
+            log_success "PyTorch版本满足要求（>=2.0）"
+            
+            # 检查GPU支持是否匹配
+            if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
+                if [[ "$PYTORCH_CUDA_AVAILABLE" == "true" ]]; then
+                    log_success "检测到NVIDIA GPU且PyTorch支持CUDA，使用现有安装"
+                    SKIP_PYTORCH_INSTALL=true
+                else
+                    log_warning "检测到NVIDIA GPU但PyTorch不支持CUDA，将重新安装GPU版本"
+                    SKIP_PYTORCH_INSTALL=false
+                fi
+            else
+                log_success "CPU环境，使用现有PyTorch安装"
+                SKIP_PYTORCH_INSTALL=true
+            fi
+        else
+            log_warning "PyTorch版本过低（<2.0），将升级到最新版本"
+            SKIP_PYTORCH_INSTALL=false
+        fi
     else
-        log_info "未检测到NVIDIA GPU，安装CPU版本PyTorch..."
-        # 安装CPU版本PyTorch
-        conda install pytorch torchvision torchaudio cpuonly -c pytorch -y
+        log_info "未检测到PyTorch，将进行安装"
+        SKIP_PYTORCH_INSTALL=false
+    fi
+    
+    # 根据检测结果决定是否安装PyTorch
+    if [[ "$SKIP_PYTORCH_INSTALL" != "true" ]]; then
+        if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
+            log_info "检测到NVIDIA GPU，安装GPU版本PyTorch..."
+            # 安装GPU版本PyTorch
+            conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia -y
+        else
+            log_info "未检测到NVIDIA GPU，安装CPU版本PyTorch..."
+            # 安装CPU版本PyTorch
+            conda install pytorch torchvision torchaudio cpuonly -c pytorch -y
+        fi
+        
+        # 验证安装
+        if python -c "import torch" &> /dev/null; then
+            NEW_PYTORCH_VERSION=$(python -c "import torch; print(torch.__version__)" 2>/dev/null || echo "未知")
+            log_success "PyTorch安装完成，版本: $NEW_PYTORCH_VERSION"
+        else
+            log_error "PyTorch安装失败"
+            return 1
+        fi
+    else
+        log_info "跳过PyTorch安装，使用现有版本: $PYTORCH_VERSION"
     fi
     
     # 安装项目依赖
@@ -394,10 +474,26 @@ run_python_version() {
     
     # 检查是否在conda环境中
     if [[ "$USE_ANACONDA" == "true" ]]; then
-        # 确保conda在PATH中
-        if [[ ":$PATH:" != *":$HOME/anaconda3/bin:"* ]]; then
-            export PATH="$HOME/anaconda3/bin:$PATH"
-        fi
+        # 动态检测conda安装路径并确保在PATH中
+        CONDA_PATHS=(
+            "$HOME/anaconda3/bin"
+            "/root/anaconda3/bin"
+            "/opt/anaconda3/bin"
+            "/usr/local/anaconda3/bin"
+            "/opt/miniconda3/bin"
+            "$HOME/miniconda3/bin"
+        )
+        
+        CONDA_BIN_FOUND=false
+        for conda_bin_path in "${CONDA_PATHS[@]}"; do
+            if [[ -d "$conda_bin_path" ]] && [[ -f "$conda_bin_path/conda" ]]; then
+                if [[ ":$PATH:" != *":$conda_bin_path:"* ]]; then
+                    export PATH="$conda_bin_path:$PATH"
+                fi
+                CONDA_BIN_FOUND=true
+                break
+            fi
+        done
         
         # 激活conda环境 - 检测conda.sh的位置
         CONDA_SH_PATHS=(

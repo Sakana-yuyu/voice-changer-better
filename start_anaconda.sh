@@ -164,6 +164,29 @@ check_python_version() {
 }
 
 # 检查GPU支持
+# 检查PyTorch安装状态
+check_pytorch_installation() {
+    log_step "检查PyTorch安装状态..."
+    
+    if python -c "import torch" &> /dev/null; then
+        PYTORCH_VERSION=$(python -c "import torch; print(torch.__version__)" 2>/dev/null || echo "未知")
+        log_info "检测到PyTorch版本: $PYTORCH_VERSION"
+        
+        # 检查版本是否满足要求（2.0+）
+        if python -c "import torch; import sys; sys.exit(0 if tuple(map(int, torch.__version__.split('.')[:2])) >= (2, 0) else 1)" 2>/dev/null; then
+            log_success "PyTorch版本满足要求（>=2.0）"
+            return 0
+        else
+            log_warning "PyTorch版本过低（<2.0），建议升级"
+            log_info "运行以下命令升级: ./auto_deploy.sh --anaconda"
+            return 1
+        fi
+    else
+        log_error "未检测到PyTorch，请先运行: ./auto_deploy.sh --anaconda"
+        return 1
+    fi
+}
+
 check_gpu_support() {
     log_step "检查GPU支持..."
     
@@ -175,10 +198,12 @@ check_gpu_support() {
         if python -c "import torch; print('GPU可用:', torch.cuda.is_available())" 2>/dev/null; then
             GPU_AVAILABLE=$(python -c "import torch; print(torch.cuda.is_available())" 2>/dev/null)
             if [[ "$GPU_AVAILABLE" == "True" ]]; then
-                log_success "PyTorch GPU支持已启用"
+                CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda)" 2>/dev/null || echo "未知")
+                log_success "PyTorch GPU支持已启用，CUDA版本: $CUDA_VERSION"
                 return 0
             else
                 log_warning "PyTorch GPU支持未启用，将使用CPU模式"
+                log_info "如需GPU支持，请运行: ./auto_deploy.sh --anaconda"
             fi
         else
             log_warning "无法检查PyTorch GPU支持"
@@ -267,6 +292,11 @@ main() {
     
     # 检查Python版本
     check_python_version
+    
+    # 检查PyTorch安装
+    if ! check_pytorch_installation; then
+        log_warning "PyTorch检查失败，但继续启动..."
+    fi
     
     # 检查项目文件
     check_project_files

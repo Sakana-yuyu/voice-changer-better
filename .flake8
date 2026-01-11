@@ -1,0 +1,10 @@
+[flake8]
+per-file-ignores =
+    server/voice_changer/DDSP_SVC/models/ddsp/pcmer.py:F821
+    server/voice_changer/DiffusionSVC/inferencer/diffusion_svc_model/diffusion/naive/pcmer.py:F821
+    server/voice_changer/DiffusionSVC/inferencer/diffusion_svc_model/tools/tools.py:F821
+    server/voice_changer/DiffusionSVC/onnxExporter/DiffusionSVC_ONNX.py:E999
+    server/voice_changer/DiffusionSVC/onnxExporter/export2onnx.py:F821
+    server/voice_changer/MMVCv13/TrainerFunctions.py:F824
+    server/voice_changer/RVC/embedder/whisper/audio.py:F821
+    server/voice_changer/SoVitsSvc40/models/modules/mel_processing.py:F824
